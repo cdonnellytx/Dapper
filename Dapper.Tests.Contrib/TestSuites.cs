@@ -155,7 +155,7 @@ namespace Dapper.Tests.Contrib
         }
     }
 
-#if !NETCOREAPP1_0 && !NETCOREAPP2_0
+#if SQL_CE
     public class SqlCETestSuite : TestSuite
     {
         const string FileName = "Test.DB.sdf";
@@ -197,7 +197,7 @@ namespace Dapper.Tests.Contrib
         // http://www.oracle.com/technetwork/database/database-technologies/express-edition/downloads/index-083047.html
         
 
-        public static string ConnectionString => "Data Source=MyOracleDB;User Id=myUsername;Password=myPassword;Integrated Security=no;";
+        public static string ConnectionString => "Data Source=MyOracleDB;User Id=myUsername;Password=myPassword;";
         
         public override IDbConnection GetConnection() => new OracleConnection(ConnectionString);
         
@@ -208,27 +208,27 @@ namespace Dapper.Tests.Contrib
                 connection.Open();
                 const string schema = "testing";
 
-                Action<string, string> DropTable = (table, sequence) =>
+                void DropTable(string table, string sequence)
                 {
-                    //connection.Execute($@"EXECUTE IMMEDIATE '
-                    //    DECLARE itemExists NUMBER;
-                    //    BEGIN
-                    //        itemExists := 0;
-
-                    //        SELECT COUNT(CONSTRAINT_NAME) INTO itemExists
-                    //            FROM ALL_CONSTRAINTS
-                    //            WHERE UPPER(CONSTRAINT_NAME) = UPPER('{constraint}');
-
-                    //        IF itemExists > 0 THEN
-                    //            EXECUTE IMMEDIATE 'ALTER TABLE {table} DROP CONSTRAINT {constraint}';
-                    //        END IF;
-                    //    END; ';
-                    //");
-                    if (string.IsNullOrWhiteSpace(sequence))
+                    if (!string.IsNullOrWhiteSpace(sequence))
                     {
-                        connection.Execute($@"DROP SEQUENCE {sequence};");
+                        connection.Execute($@"
+                        DECLARE itemExists NUMBER;
+                        BEGIN
+                            itemExists := 0;
+
+                            SELECT COUNT(*) INTO itemExists
+                                FROM ALL_SEQUENCES
+                                WHERE SEQUENCE_OWNER = UPPER('{schema}') AND SEQUENCE_NAME = UPPER('{sequence}');
+                            
+                            IF itemExists > 0 THEN
+                                EXECUTE IMMEDIATE 'DROP SEQUENCE {schema}.{sequence}';
+                            END IF;
+                        END;
+                    ");
                     }
-                    connection.Execute($@"EXECUTE IMMEDIATE '
+
+                    connection.Execute($@"
                         DECLARE itemExists NUMBER;
                         BEGIN
                             itemExists := 0;
@@ -239,45 +239,44 @@ namespace Dapper.Tests.Contrib
                             
                             IF itemExists > 0 THEN
                                 EXECUTE IMMEDIATE 'DROP TABLE {schema}.{table} CASCADE CONSTRAINTS PURGE';
-                            END IF
-                        END';
-
+                            END IF;
+                        END;
                     ");
-                };
+                }
 
                 DropTable("Stuff", "Stuff_TheId_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Stuff (TheId number(10,0) not null, Name varchar2(100) not null, Created DATE null);");
-                connection.Execute($@"ALTER TABLE {schema}.Stuff ADD CONSTRAINT Stuff_pk PRIMARY KEY (TheId);");
-                connection.Execute(@"CREATE SEQUENCE Stuff_TheId_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20;");
+                connection.Execute($@"CREATE TABLE {schema}.Stuff (TheId number(10,0) not null, Name varchar2(100) not null, Created DATE null)");
+                connection.Execute($@"ALTER TABLE {schema}.Stuff ADD CONSTRAINT Stuff_pk PRIMARY KEY (TheId)");
+                connection.Execute($@"CREATE SEQUENCE {schema}.Stuff_TheId_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("People", "People_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.People (Id number(10,0) not null, Name varchar2(100) not null);");
-                connection.Execute($@"ALTER TABLE {schema}.People ADD CONSTRAINT People_pk PRIMARY KEY (Id);");
-                connection.Execute(@"CREATE SEQUENCE People_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20;");
+                connection.Execute($@"CREATE TABLE {schema}.People (Id number(10,0) not null, Name varchar2(100) not null)");
+                connection.Execute($@"ALTER TABLE {schema}.People ADD CONSTRAINT People_pk PRIMARY KEY (Id)");
+                connection.Execute($@"CREATE SEQUENCE {schema}.People_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("Users", "Users_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Users (Id number(10,0) not null, Name varchar2(100) not null, Age number(10,0) not null);");
-                connection.Execute($@"ALTER TABLE {schema}.Users ADD CONSTRAINT Users_pk PRIMARY KEY (Id);");
-                connection.Execute(@"CREATE SEQUENCE Users_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20;");
+                connection.Execute($@"CREATE TABLE {schema}.Users (Id number(10,0) not null, Name varchar2(100) not null, Age number(10,0) not null)");
+                connection.Execute($@"ALTER TABLE {schema}.Users ADD CONSTRAINT Users_pk PRIMARY KEY (Id)");
+                connection.Execute($@"CREATE SEQUENCE {schema}.Users_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("Automobiles", "Automobiles_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Automobiles (Id number(10,0) not null, Name varchar2(100) not null);");
-                connection.Execute($@"ALTER TABLE {schema}.Automobiles ADD CONSTRAINT Automobiles_pk PRIMARY KEY (Id);");
-                connection.Execute(@"CREATE SEQUENCE Automobiles_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20;");
+                connection.Execute($@"CREATE TABLE {schema}.Automobiles (Id number(10,0) not null, Name varchar2(100) not null)");
+                connection.Execute($@"ALTER TABLE {schema}.Automobiles ADD CONSTRAINT Automobiles_pk PRIMARY KEY (Id)");
+                connection.Execute($@"CREATE SEQUENCE {schema}.Automobiles_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("Results", "Results_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Results (Id number(10,0) not null, Name varchar2(100) not null, [Order] number(10,0) not null);");
-                connection.Execute($@"ALTER {schema}.Results ADD CONSTRAINT Results_pk PRIMARY KEY (Id);");
-                connection.Execute(@"CREATE SEQUENCE Results_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20;");
+                connection.Execute($@"CREATE TABLE {schema}.Results (Id number(10,0) not null, Name varchar2(100) not null, ""ORDER"" number(10,0) not null)");
+                connection.Execute($@"ALTER TABLE {schema}.Results ADD CONSTRAINT Results_pk PRIMARY KEY (Id)");
+                connection.Execute($@"CREATE SEQUENCE {schema}.Results_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("ObjectX", null);
-                connection.Execute($@"CREATE TABLE {schema}.ObjectX (ObjectXId varchar2(100) not null, Name varchar2(100) not null);");
+                connection.Execute($@"CREATE TABLE {schema}.ObjectX (ObjectXId varchar2(100) not null, Name varchar2(100) not null)");
 
                 DropTable("ObjectY", null);
-                connection.Execute($@"CREATE TABLE {schema}.ObjectY (ObjectYId number(10,0) not null, Name varchar2(100) not null);");
+                connection.Execute($@"CREATE TABLE {schema}.ObjectY (ObjectYId number(10,0) not null, Name varchar2(100) not null)");
 
                 DropTable("ObjectZ", null);
-                connection.Execute($@"CREATE TABLE {schema}.ObjectZ (Id number(10,0) not null, Name varchar2(100) not null);");
+                connection.Execute($@"CREATE TABLE {schema}.ObjectZ (Id number(10,0) not null, Name varchar2(100) not null)");
             }
         }
     }
