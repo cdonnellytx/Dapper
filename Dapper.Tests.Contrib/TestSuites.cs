@@ -6,9 +6,12 @@ using System.Data.SqlClient;
 using System.IO;
 using Xunit;
 using Xunit.Sdk;
-using Oracle.ManagedDataAccess.Client;
 
-#if !NETCOREAPP1_0 && !NETCOREAPP2_0
+#if ORACLE
+using Oracle.ManagedDataAccess.Client;
+#endif
+
+#if SQL_CE
 using System.Data.SqlServerCe;
 #endif
 
@@ -187,7 +190,7 @@ namespace Dapper.Tests.Contrib
 #endif
 
 
-#if !COREFX
+#if ORACLE
     public class OracleTestSuite : TestSuite
     {
         // A usable version of Oracle for testing can be downloaded from 

@@ -6,8 +6,10 @@ using System.Linq;
 using Dapper.Contrib.Extensions;
 using Xunit;
 
-#if !NETCOREAPP1_0 && !NETCOREAPP2_0
+#if TRANSACTIONS
 using System.Transactions;
+#endif
+#if SQL_CE
 using System.Data.SqlServerCe;
 #endif
 using FactAttribute = Dapper.Tests.Contrib.SkippableFactAttribute;
@@ -535,7 +537,7 @@ namespace Dapper.Tests.Contrib
             using (var connection = GetOpenConnection())
             {
                 connection.DeleteAll<User>();
-                Assert.IsNull(connection.Get<User>(3));
+                Assert.Null(connection.Get<User>(3));
                 try
                 {
                     connection.Insert(new User { Name = "Adam", Age = 10 });
@@ -665,7 +667,7 @@ namespace Dapper.Tests.Contrib
 
                     txscope.Dispose();  //rollback
 
-                    Assert.IsNull(connection.Get<Car>(id));   //returns null - car with that id should not exist
+                    Assert.Null(connection.Get<Car>(id));   //returns null - car with that id should not exist
                 }
             }
         }
