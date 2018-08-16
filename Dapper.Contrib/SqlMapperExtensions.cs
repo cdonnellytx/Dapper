@@ -1249,7 +1249,7 @@ public partial class OracleAdapter : ISqlAdapter
 
         // If no primary key then safe to assume a join table with not too much data to return
         if (!keyProperties.Any())
-            sb.Append(" RETURNING *");
+            sb.Append(" RETURNING *"); // FIXME
         else
         {
             sb.Append(" RETURNING ");
