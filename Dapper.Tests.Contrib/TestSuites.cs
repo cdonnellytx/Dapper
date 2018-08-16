@@ -195,10 +195,10 @@ namespace Dapper.Tests.Contrib
     {
         // A usable version of Oracle for testing can be downloaded from 
         // http://www.oracle.com/technetwork/database/database-technologies/express-edition/downloads/index-083047.html
-        
+
 
         public static string ConnectionString => "Data Source=MyOracleDB;User Id=myUsername;Password=myPassword;";
-        
+
         public override IDbConnection GetConnection() => new OracleConnection(ConnectionString);
         
         static OracleTestSuite()
@@ -244,39 +244,41 @@ namespace Dapper.Tests.Contrib
                     ");
                 }
 
+                connection.Execute($"ALTER SESSION SET CURRENT_SCHEMA = {schema}");
+
                 DropTable("Stuff", "Stuff_TheId_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Stuff (TheId number(10,0) not null, Name varchar2(100) not null, Created DATE null)");
-                connection.Execute($@"ALTER TABLE {schema}.Stuff ADD CONSTRAINT Stuff_pk PRIMARY KEY (TheId)");
-                connection.Execute($@"CREATE SEQUENCE {schema}.Stuff_TheId_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
+                connection.Execute("CREATE TABLE Stuff (TheId number(10,0) not null, Name varchar2(100) not null, Created DATE null)");
+                connection.Execute("ALTER TABLE Stuff ADD CONSTRAINT Stuff_pk PRIMARY KEY (TheId)");
+                connection.Execute("CREATE SEQUENCE Stuff_TheId_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("People", "People_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.People (Id number(10,0) not null, Name varchar2(100) not null)");
-                connection.Execute($@"ALTER TABLE {schema}.People ADD CONSTRAINT People_pk PRIMARY KEY (Id)");
-                connection.Execute($@"CREATE SEQUENCE {schema}.People_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
+                connection.Execute("CREATE TABLE People (Id number(10,0) not null, Name varchar2(100) not null)");
+                connection.Execute("ALTER TABLE People ADD CONSTRAINT People_pk PRIMARY KEY (Id)");
+                connection.Execute("CREATE SEQUENCE People_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("Users", "Users_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Users (Id number(10,0) not null, Name varchar2(100) not null, Age number(10,0) not null)");
-                connection.Execute($@"ALTER TABLE {schema}.Users ADD CONSTRAINT Users_pk PRIMARY KEY (Id)");
-                connection.Execute($@"CREATE SEQUENCE {schema}.Users_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
+                connection.Execute("CREATE TABLE Users (Id number(10,0) not null, Name varchar2(100) not null, Age number(10,0) not null)");
+                connection.Execute("ALTER TABLE Users ADD CONSTRAINT Users_pk PRIMARY KEY (Id)");
+                connection.Execute("CREATE SEQUENCE Users_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("Automobiles", "Automobiles_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Automobiles (Id number(10,0) not null, Name varchar2(100) not null)");
-                connection.Execute($@"ALTER TABLE {schema}.Automobiles ADD CONSTRAINT Automobiles_pk PRIMARY KEY (Id)");
-                connection.Execute($@"CREATE SEQUENCE {schema}.Automobiles_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
+                connection.Execute("CREATE TABLE Automobiles (Id number(10,0) not null, Name varchar2(100) not null)");
+                connection.Execute("ALTER TABLE Automobiles ADD CONSTRAINT Automobiles_pk PRIMARY KEY (Id)");
+                connection.Execute("CREATE SEQUENCE Automobiles_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("Results", "Results_Id_SEQ");
-                connection.Execute($@"CREATE TABLE {schema}.Results (Id number(10,0) not null, Name varchar2(100) not null, ""ORDER"" number(10,0) not null)");
-                connection.Execute($@"ALTER TABLE {schema}.Results ADD CONSTRAINT Results_pk PRIMARY KEY (Id)");
-                connection.Execute($@"CREATE SEQUENCE {schema}.Results_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
+                connection.Execute("CREATE TABLE Results (Id number(10,0) not null, Name varchar2(100) not null, \"ORDER\" number(10,0) not null)");
+                connection.Execute("ALTER TABLE Results ADD CONSTRAINT Results_pk PRIMARY KEY (Id)");
+                connection.Execute("CREATE SEQUENCE Results_Id_SEQ MINVALUE 1 START WITH 1 INCREMENT BY 1 CACHE 20");
 
                 DropTable("ObjectX", null);
-                connection.Execute($@"CREATE TABLE {schema}.ObjectX (ObjectXId varchar2(100) not null, Name varchar2(100) not null)");
+                connection.Execute("CREATE TABLE ObjectX (ObjectXId varchar2(100) not null, Name varchar2(100) not null)");
 
                 DropTable("ObjectY", null);
-                connection.Execute($@"CREATE TABLE {schema}.ObjectY (ObjectYId number(10,0) not null, Name varchar2(100) not null)");
+                connection.Execute("CREATE TABLE ObjectY (ObjectYId number(10,0) not null, Name varchar2(100) not null)");
 
                 DropTable("ObjectZ", null);
-                connection.Execute($@"CREATE TABLE {schema}.ObjectZ (Id number(10,0) not null, Name varchar2(100) not null)");
+                connection.Execute("CREATE TABLE ObjectZ (Id number(10,0) not null, Name varchar2(100) not null)");
             }
         }
     }
