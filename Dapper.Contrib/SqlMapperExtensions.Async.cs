@@ -178,18 +178,6 @@ namespace Dapper.Contrib.Extensions
             var computedProperties = ComputedPropertiesCache(type);
             var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
 
-            if (sqlAdapter.SequenceSupported)
-            {
-                foreach (var property in keyProperties)
-                {
-                    var sequenceName = GetSequenceName(property);
-                    if (!string.IsNullOrWhiteSpace(sequenceName))
-                    {
-                        sqlAdapter.AppendColumnName(sbColumnList, property.Name);
-                        sbColumnList.Append(", ");
-                    }
-                }
-            }
             for (var i = 0; i < allPropertiesExceptKeyAndComputed.Count; i++)
             {
                 var property = allPropertiesExceptKeyAndComputed[i];
@@ -199,19 +187,6 @@ namespace Dapper.Contrib.Extensions
             }
 
             var sbParameterList = new StringBuilder(null);
-
-            if (sqlAdapter.SequenceSupported)
-            {
-                foreach (var property in keyProperties)
-                {
-                    var sequenceName = GetSequenceName(property);
-                    if (!string.IsNullOrWhiteSpace(sequenceName))
-                    {
-                        sqlAdapter.AppendSequenceNextValue(sbParameterList, sequenceName);
-                        sbParameterList.Append(", ");
-                    }
-                }
-            }
             for (var i = 0; i < allPropertiesExceptKeyAndComputed.Count; i++)
             {
                 var property = allPropertiesExceptKeyAndComputed[i];

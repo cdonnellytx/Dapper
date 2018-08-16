@@ -63,7 +63,6 @@ namespace Dapper.Contrib.Extensions
         private static readonly ConcurrentDictionary<RuntimeTypeHandle, IEnumerable<PropertyInfo>> ComputedProperties = new ConcurrentDictionary<RuntimeTypeHandle, IEnumerable<PropertyInfo>>();
         private static readonly ConcurrentDictionary<RuntimeTypeHandle, string> GetQueries = new ConcurrentDictionary<RuntimeTypeHandle, string>();
         private static readonly ConcurrentDictionary<RuntimeTypeHandle, string> TypeTableName = new ConcurrentDictionary<RuntimeTypeHandle, string>();
-        private static readonly ConcurrentDictionary<PropertyInfo, string> Sequences = new ConcurrentDictionary<PropertyInfo, string>();
 
         private static readonly ISqlAdapter DefaultAdapter = new SqlServerAdapter();
         private static readonly Dictionary<string, ISqlAdapter> AdapterDictionary
@@ -289,27 +288,6 @@ namespace Dapper.Contrib.Extensions
         /// </summary>
         public static TableNameMapperDelegate TableNameMapper;
 
-
-        private static string GetSequenceName(PropertyInfo keyPropertie)
-        {
-            string sequence;
-            if (!Sequences.TryGetValue(keyPropertie, out sequence))
-            {
-                var attribute = keyPropertie.GetCustomAttributes(typeof(KeyAttribute), false).FirstOrDefault();
-
-                KeyAttribute keyAttribute = null;
-
-                if (attribute != null)
-                    keyAttribute = attribute as KeyAttribute;
-
-                if (keyAttribute != null)
-                    sequence = keyAttribute.SequenceName;
-
-                Sequences[keyPropertie] = sequence;
-            }
-            return sequence;
-        }
-
         private static string GetTableName(Type type)
         {
             if (TypeTableName.TryGetValue(type.TypeHandle, out string name)) return name;
@@ -384,18 +362,7 @@ namespace Dapper.Contrib.Extensions
             var allPropertiesExceptKeyAndComputed = allProperties.Except(keyProperties.Union(computedProperties)).ToList();
 
             var adapter = GetFormatter(connection);
-            if (adapter.SequenceSupported)
-            {
-                foreach (var property in keyProperties)
-                {
-                    var sequenceName = GetSequenceName(property);
-                    if (!string.IsNullOrWhiteSpace(sequenceName))
-                    {
-                        adapter.AppendColumnName(sbColumnList, property.Name);
-                        sbColumnList.Append(", ");
-                    }
-                }
-            }
+
             for (var i = 0; i < allPropertiesExceptKeyAndComputed.Count; i++)
             {
                 var property = allPropertiesExceptKeyAndComputed[i];
@@ -405,18 +372,6 @@ namespace Dapper.Contrib.Extensions
             }
 
             var sbParameterList = new StringBuilder(null);
-            if (adapter.SequenceSupported)
-            {
-                foreach (var property in keyProperties)
-                {
-                    var sequenceName = GetSequenceName(property);
-                    if (!string.IsNullOrWhiteSpace(sequenceName))
-                    {
-                        adapter.AppendSequenceNextValue(sbParameterList, sequenceName);
-                        sbParameterList.Append(", ");
-                    }
-                }
-            }
             for (var i = 0; i < allPropertiesExceptKeyAndComputed.Count; i++)
             {
                 var property = allPropertiesExceptKeyAndComputed[i];
@@ -782,7 +737,6 @@ namespace Dapper.Contrib.Extensions
     [AttributeUsage(AttributeTargets.Property)]
     public class KeyAttribute : Attribute
     {
-        public string SequenceName { get; set; }
     }
 
     /// <summary>
@@ -829,8 +783,6 @@ namespace Dapper.Contrib.Extensions
 /// </summary>
 public partial interface ISqlAdapter
 {
-    bool SequenceSupported { get; }
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -858,7 +810,6 @@ public partial interface ISqlAdapter
     /// <param name="columnName">The column name.</param>
     void AppendColumnNameEqualsValue(StringBuilder sb, string columnName);
     void AppendParameter(StringBuilder sb, string parameterName);
-    void AppendSequenceNextValue(StringBuilder sb, string sequenceName);
 }
 
 /// <summary>
@@ -866,8 +817,6 @@ public partial interface ISqlAdapter
 /// </summary>
 public partial class SqlServerAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => true;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -924,13 +873,6 @@ public partial class SqlServerAdapter : ISqlAdapter
     {
         sb.AppendFormat("@{0}", parameterName);
     }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        // https://msdn.microsoft.com/en-us/library/ff878370.aspx
-        sb.Append("NEXT VALUE FOR ");
-        sb.Append(sequenceName);
-    }
 }
 
 /// <summary>
@@ -938,8 +880,6 @@ public partial class SqlServerAdapter : ISqlAdapter
 /// </summary>
 public partial class SqlCeServerAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => false;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -996,11 +936,6 @@ public partial class SqlCeServerAdapter : ISqlAdapter
     {
         sb.AppendFormat("@{0}", parameterName);
     }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        throw new NotSupportedException("SQL CE does not support sequences");
-    }
 }
 
 /// <summary>
@@ -1008,8 +943,6 @@ public partial class SqlCeServerAdapter : ISqlAdapter
 /// </summary>
 public partial class MySqlAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => false;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -1065,11 +998,6 @@ public partial class MySqlAdapter : ISqlAdapter
     {
         sb.AppendFormat("@{0}", parameterName);
     }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        throw new NotSupportedException("MySql does not support sequences");
-    }
 }
 
 /// <summary>
@@ -1077,8 +1005,6 @@ public partial class MySqlAdapter : ISqlAdapter
 /// </summary>
 public partial class PostgresAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => true;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -1155,12 +1081,6 @@ public partial class PostgresAdapter : ISqlAdapter
     {
         sb.AppendFormat("@{0}", parameterName);
     }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        // http://www.postgresql.org/docs/current/static/sql-createsequence.html
-        sb.AppendFormat("nextval('{0}')", sequenceName);
-    }
 }
 
 /// <summary>
@@ -1168,8 +1088,6 @@ public partial class PostgresAdapter : ISqlAdapter
 /// </summary>
 public partial class SQLiteAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => false;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -1223,11 +1141,6 @@ public partial class SQLiteAdapter : ISqlAdapter
     {
         sb.AppendFormat("@{0}", parameterName);
     }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        throw new NotSupportedException("SQLite does not support sequences");
-    }
 }
 
 /// <summary>
@@ -1235,8 +1148,6 @@ public partial class SQLiteAdapter : ISqlAdapter
 /// </summary>
 public partial class FbAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => true;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -1294,13 +1205,6 @@ public partial class FbAdapter : ISqlAdapter
     {
         sb.AppendFormat("@{0}", parameterName);
     }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        // https://firebirdsql.org/refdocs/langrefupd21-nextvaluefor.html
-        sb.Append("NEXT VALUE FOR ");
-        sb.Append(sequenceName);
-    }
 }
 
 /// <summary>
@@ -1308,8 +1212,6 @@ public partial class FbAdapter : ISqlAdapter
 /// </summary>
 public partial class OracleAdapter : ISqlAdapter
 {
-    public bool SequenceSupported => true;
-
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -1396,12 +1298,6 @@ public partial class OracleAdapter : ISqlAdapter
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat(":{0}", parameterName);
-    }
-
-    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
-    {
-        sb.Append(sequenceName);
-        sb.Append(".NEXTVAL");
     }
 }
 
