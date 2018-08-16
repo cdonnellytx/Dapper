@@ -1303,10 +1303,25 @@ public partial class FbAdapter : ISqlAdapter
     }
 }
 
+/// <summary>
+/// The Oracle database adapter.
+/// </summary>
 public partial class OracleAdapter : ISqlAdapter
 {
     public bool SequenceSupported => true;
 
+    /// <summary>
+    /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
+    /// </summary>
+    /// <param name="connection">The connection to use.</param>
+    /// <param name="transaction">The transaction to use.</param>
+    /// <param name="commandTimeout">The command timeout to use.</param>
+    /// <param name="tableName">The table to insert into.</param>
+    /// <param name="columnList">The columns to set with this insert.</param>
+    /// <param name="parameterList">The parameters to set for this insert.</param>
+    /// <param name="keyProperties">The key columns in this table.</param>
+    /// <param name="entityToInsert">The entity to insert.</param>
+    /// <returns>The Id of the row created.</returns>
     public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var parameters = new DynamicParameters(entityToInsert);
@@ -1354,6 +1369,11 @@ public partial class OracleAdapter : ISqlAdapter
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Adds the name of a column.
+    /// </summary>
+    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
         // In Oracle when column names are quoted they are case sensitive. Because 
@@ -1361,6 +1381,11 @@ public partial class OracleAdapter : ISqlAdapter
         sb.Append(columnName);
     }
 
+    /// <summary>
+    /// Adds a column equality to a parameter.
+    /// </summary>
+    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
         AppendColumnName(sb, columnName);
