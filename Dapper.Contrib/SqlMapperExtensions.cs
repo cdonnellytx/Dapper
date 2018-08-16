@@ -866,7 +866,7 @@ public partial interface ISqlAdapter
 /// </summary>
 public partial class SqlServerAdapter : ISqlAdapter
 {
-    public bool SequenceSupported { get { return true; } }
+    public bool SequenceSupported => true;
 
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -938,7 +938,7 @@ public partial class SqlServerAdapter : ISqlAdapter
 /// </summary>
 public partial class SqlCeServerAdapter : ISqlAdapter
 {
-    public bool SequenceSupported { get { return false; } }
+    public bool SequenceSupported => false;
 
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -1008,7 +1008,7 @@ public partial class SqlCeServerAdapter : ISqlAdapter
 /// </summary>
 public partial class MySqlAdapter : ISqlAdapter
 {
-    public bool SequenceSupported { get { return false; } }
+    public bool SequenceSupported => false;
 
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -1077,7 +1077,7 @@ public partial class MySqlAdapter : ISqlAdapter
 /// </summary>
 public partial class PostgresAdapter : ISqlAdapter
 {
-    public bool SequenceSupported { get { return true; } }
+    public bool SequenceSupported => true;
 
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -1168,7 +1168,7 @@ public partial class PostgresAdapter : ISqlAdapter
 /// </summary>
 public partial class SQLiteAdapter : ISqlAdapter
 {
-    public bool SequenceSupported { get { return false; } }
+    public bool SequenceSupported => false;
 
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -1226,7 +1226,7 @@ public partial class SQLiteAdapter : ISqlAdapter
 
     public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
     {
-        throw new NotSupportedException("MySql does not support sequences");
+        throw new NotSupportedException("SQLite does not support sequences");
     }
 }
 
@@ -1235,6 +1235,8 @@ public partial class SQLiteAdapter : ISqlAdapter
 /// </summary>
 public partial class FbAdapter : ISqlAdapter
 {
+    public bool SequenceSupported => true;
+
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
@@ -1283,13 +1285,27 @@ public partial class FbAdapter : ISqlAdapter
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
-        sb.AppendFormat("{0} = @{1}", columnName, columnName);
+        AppendColumnName(sb, columnName);
+        sb.Append(" = ");
+        AppendParameter(sb, columnName);
+    }
+
+    public void AppendParameter(StringBuilder sb, string parameterName)
+    {
+        sb.AppendFormat("@{0}", parameterName);
+    }
+
+    public void AppendSequenceNextValue(StringBuilder sb, string sequenceName)
+    {
+        // https://firebirdsql.org/refdocs/langrefupd21-nextvaluefor.html
+        sb.Append("NEXT VALUE FOR ");
+        sb.Append(sequenceName);
     }
 }
 
 public partial class OracleAdapter : ISqlAdapter
 {
-    public bool SequenceSupported { get { return true; } }
+    public bool SequenceSupported => true;
 
     public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
