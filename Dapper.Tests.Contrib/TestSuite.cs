@@ -716,11 +716,13 @@ namespace Dapper.Tests.Contrib
             }
         }
 
+        protected virtual string BuilderTemplateWithoutComposition_Sql => "SELECT COUNT(*) FROM Users WHERE Age = @age";
+
         [Fact]
         public void BuilderTemplateWithoutComposition()
         {
             var builder = new SqlBuilder();
-            var template = builder.AddTemplate("SELECT COUNT(*) FROM Users WHERE Age = @age", new { age = 5 });
+            var template = builder.AddTemplate(BuilderTemplateWithoutComposition_Sql, new { age = 5 });
 
             if (template.RawSql == null) throw new Exception("RawSql null");
             if (template.Parameters == null) throw new Exception("Parameters null");
