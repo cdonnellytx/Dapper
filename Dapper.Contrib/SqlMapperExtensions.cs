@@ -1282,10 +1282,8 @@ public partial class OracleAdapter : ISqlAdapter
         StringBuilder sb = new StringBuilder();
         sb.AppendFormat("INSERT INTO {0} ({1}) VALUES ({2})", tableName, columnList, parameterList);
 
-        // If no primary key then safe to assume a join table with not too much data to return
-        if (!keyProperties.Any())
-            sb.Append(" RETURNING *"); // FIXME
-        else
+        // TODO does Dapper need anything else returned out besides generated keys? What if the key isn't generated, but inserted?
+        if (keyProperties.Any())
         {
             sb.Append(" RETURNING ");
             var first = true;
