@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection.Emit;
 
 using Dapper;
@@ -183,9 +184,9 @@ namespace Dapper.Contrib.Extensions
             {
                 var key = GetSingleKey<T>(nameof(Get));
                 var name = GetTableName(type);
+                var sb = adapter.CreateSelectStatement(name, TypePropertiesCache(type));
 
-                StringBuilder sb = new StringBuilder();
-                sb.AppendFormat("select * from {0} where {1} = ", name, key.Name);
+                sb.AppendFormat(" where {0} = ", key.Name);
                 adapter.AppendParameter(sb, "id");
 
                 GetQueries[type.TypeHandle] = sql = sb.ToString();
@@ -207,9 +208,15 @@ namespace Dapper.Contrib.Extensions
 
                 obj = ProxyGenerator.GetInterfaceProxy<T>();
 
-                foreach (var property in TypePropertiesCache(type))
+                // ASSUMPTION: The properties are in the same order in the SQL as in the underlying DapperRow.
+                var allProperties = TypePropertiesCache(type);
+                var values = res.Values as object[] ?? res.Values.ToArray();
+                Debug.Assert(allProperties.Count == values.Length, "allProperties.Count == values.Length");
+
+                for (var i = 0; i < allProperties.Count; i++)
                 {
-                    var val = res[property.Name];
+                    var property = allProperties[i];
+                    var val = values[i];
                     if (val == null) continue;
                     if (property.PropertyType.IsGenericType() && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                     {
@@ -251,9 +258,11 @@ namespace Dapper.Contrib.Extensions
             {
                 GetSingleKey<T>(nameof(GetAll));
                 var name = GetTableName(type);
+                var adapter = GetFormatter(connection);
 
-                sql = "select * from " + name;
-                GetQueries[cacheType.TypeHandle] = sql;
+                var sb = adapter.CreateSelectStatement(name, TypePropertiesCache(type));
+
+                GetQueries[cacheType.TypeHandle] = sql = sb.ToString();
             }
 
             if (!type.IsInterface()) return connection.Query<T>(sql, null, transaction, commandTimeout: commandTimeout);
@@ -263,9 +272,15 @@ namespace Dapper.Contrib.Extensions
             foreach (IDictionary<string, object> res in result)
             {
                 var obj = ProxyGenerator.GetInterfaceProxy<T>();
-                foreach (var property in TypePropertiesCache(type))
+                // ASSUMPTION: The properties are in the same order in the SQL as in the underlying DapperRow.
+                var allProperties = TypePropertiesCache(type);
+                var values = res.Values as object[] ?? res.Values.ToArray();
+                Debug.Assert(allProperties.Count == values.Length, "allProperties.Count == values.Length");
+
+                for (var i = 0; i < allProperties.Count; i++)
                 {
-                    var val = res[property.Name];
+                    var property = allProperties[i];
+                    var val = values[i];
                     if (val == null) continue;
                     if (property.PropertyType.IsGenericType() && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                     {
@@ -1350,3 +1365,26 @@ public partial class OracleAdapter : ISqlAdapter
     }
 }
 
+/// <summary>
+/// Extension methods for <see cref="ISqlAdapter"/>.
+/// </summary>
+internal static class SqlAdapterExtensions
+{
+    internal static StringBuilder CreateSelectStatement(this ISqlAdapter adapter, string tableName, List<PropertyInfo> properties)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.Append("SELECT ");
+        for (var i = 0; i < properties.Count; i++)
+        {
+            var property = properties[i];
+            adapter.AppendColumnName(sb, property.Name);
+            if (i < properties.Count - 1)
+                sb.Append(", ");
+        }
+
+        sb.AppendFormat(" FROM {0}", tableName);
+
+        return sb;
+
+    }
+}

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -33,9 +34,9 @@ namespace Dapper.Contrib.Extensions
                 var key = GetSingleKey<T>(nameof(GetAsync));
                 var name = GetTableName(type);
 
+                var sb = adapter.CreateSelectStatement(name, TypePropertiesCache(type));
 
-                StringBuilder sb = new StringBuilder();
-                sb.AppendFormat("select * from {0} where {1} = ", name, key.Name);
+                sb.AppendFormat(" where {0} = ", key.Name);
                 adapter.AppendParameter(sb, "id");
 
                 GetQueries[type.TypeHandle] = sql = sb.ToString();
@@ -56,9 +57,15 @@ namespace Dapper.Contrib.Extensions
 
             var obj = ProxyGenerator.GetInterfaceProxy<T>();
 
-            foreach (var property in TypePropertiesCache(type))
+            // ASSUMPTION: The properties are in the same order in the SQL as in the underlying DapperRow.
+            var allProperties = TypePropertiesCache(type);
+            var values = res.Values as object[] ?? res.Values.ToArray();
+            Debug.Assert(allProperties.Count == values.Length, "allProperties.Count == values.Length");
+
+            for (var i = 0; i < allProperties.Count; i++)
             {
-                var val = res[property.Name];
+                var property = allProperties[i];
+                var val = values[i];
                 if (val == null) continue;
                 if (property.PropertyType.IsGenericType() && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                 {
@@ -96,9 +103,10 @@ namespace Dapper.Contrib.Extensions
             {
                 GetSingleKey<T>(nameof(GetAll));
                 var name = GetTableName(type);
+                var adapter = GetFormatter(connection);
 
-                sql = "SELECT * FROM " + name;
-                GetQueries[cacheType.TypeHandle] = sql;
+                var sb = adapter.CreateSelectStatement(name, TypePropertiesCache(type));
+                GetQueries[cacheType.TypeHandle] = sql = sb.ToString();
             }
 
             if (!type.IsInterface())
@@ -114,10 +122,16 @@ namespace Dapper.Contrib.Extensions
             var list = new List<T>();
             foreach (IDictionary<string, object> res in result)
             {
+                // ASSUMPTION: The properties are in the same order in the SQL as in the underlying DapperRow.
                 var obj = ProxyGenerator.GetInterfaceProxy<T>();
-                foreach (var property in TypePropertiesCache(type))
+                var allProperties = TypePropertiesCache(type);
+                var values = res.Values as object[] ?? res.Values.ToArray();
+                Debug.Assert(allProperties.Count == values.Length, "allProperties.Count == values.Length");
+
+                for (var i = 0; i < allProperties.Count; i++)
                 {
-                    var val = res[property.Name];
+                    var property = allProperties[i];
+                    var val = values[i];
                     if (val == null) continue;
                     if (property.PropertyType.IsGenericType() && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                     {
