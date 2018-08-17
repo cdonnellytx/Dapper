@@ -1262,28 +1262,39 @@ public partial class OracleAdapter : ISqlAdapter
     public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var parameters = new DynamicParameters(entityToInsert);
-        var cmd = CreateInsertSql(tableName, columnList, parameterList, keyProperties, parameters);
+
+        var propertyInfos = keyProperties as PropertyInfo[] ?? keyProperties.ToArray();
+        var cmd = CreateInsertSql(tableName, columnList, parameterList, propertyInfos, parameters);
 
         connection.Execute(cmd, parameters, transaction, commandTimeout: commandTimeout);
 
         // Return the key by assigning the corresponding property in the object - by product is that it supports compound primary keys
         var id = 0;
-        foreach (var property in keyProperties)
+        foreach (var property in propertyInfos)
         {
-            int value = parameters.Get<int>($"newid_{property.Name}");
+            var value = parameters.Get<int>($"newid_{property.Name}");
             property.SetValue(entityToInsert, value, null);
             if (id == 0) { id = value; }
         }
         return id;
     }
 
-    protected string CreateInsertSql(string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, DynamicParameters parameters)
+    /// <summary>
+    /// Generates an Oracle SQL <c>INSERT</c> statement.
+    /// </summary>
+    /// <param name="tableName">The table to insert into.</param>
+    /// <param name="columnList">The columns to set with this insert.</param>
+    /// <param name="parameterList">The parameters to set for this insert.</param>
+    /// <param name="keyProperties">The key columns in this table.</param>
+    /// <param name="parameters">The dynamic parameter bag.</param>
+    /// <returns>An Oracle SQL <c>INSERT</c> statement.</returns>
+    protected string CreateInsertSql(string tableName, string columnList, string parameterList, PropertyInfo[] keyProperties, DynamicParameters parameters)
     {
         StringBuilder sb = new StringBuilder();
         sb.AppendFormat("INSERT INTO {0} ({1}) VALUES ({2})", tableName, columnList, parameterList);
 
-        // TODO does Dapper need anything else returned out besides generated keys? What if the key isn't generated, but inserted?
-        if (keyProperties.Any())
+        // TODO does Dapper need to return everything if [Key] is empty?  I don't think so?
+        if (keyProperties.Length > 0)
         {
             sb.Append(" RETURNING ");
             var first = true;

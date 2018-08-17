@@ -602,13 +602,14 @@ public partial class OracleAdapter
     public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var parameters = new DynamicParameters(entityToInsert);
-        var cmd = CreateInsertSql(tableName, columnList, parameterList, keyProperties, parameters);
+        var propertyInfos = keyProperties as PropertyInfo[] ?? keyProperties.ToArray();
+        var cmd = CreateInsertSql(tableName, columnList, parameterList, propertyInfos, parameters);
 
         await connection.ExecuteAsync(cmd, parameters, transaction, commandTimeout: commandTimeout).ConfigureAwait(false);
 
         // Return the key by assigning the corresponding property in the object - by product is that it supports compound primary keys
         var id = 0;
-        foreach (var property in keyProperties)
+        foreach (var property in propertyInfos)
         {
             int value = parameters.Get<int>($"newid_{property.Name}");
             property.SetValue(entityToInsert, value, null);
