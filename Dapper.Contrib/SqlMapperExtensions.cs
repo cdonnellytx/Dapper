@@ -232,7 +232,7 @@ namespace Dapper.Contrib.Extensions
         }
 
         /// <summary>
-        /// Returns a list of entities from table "Ts".  
+        /// Returns a list of entities from table "Ts".
         /// Id of T must be marked with [Key] attribute.
         /// Entities created from interfaces are tracked/intercepted for changes and used by the Update() extension
         /// for optimal performance. 
@@ -800,15 +800,20 @@ public partial interface ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     void AppendColumnName(StringBuilder sb, string columnName);
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     void AppendColumnNameEqualsValue(StringBuilder sb, string columnName);
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     void AppendParameter(StringBuilder sb, string parameterName);
 }
 
@@ -850,7 +855,7 @@ public partial class SqlServerAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -860,7 +865,7 @@ public partial class SqlServerAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -869,6 +874,11 @@ public partial class SqlServerAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat("@{0}", parameterName);
@@ -913,7 +923,7 @@ public partial class SqlCeServerAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -923,7 +933,7 @@ public partial class SqlCeServerAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -932,6 +942,11 @@ public partial class SqlCeServerAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat("@{0}", parameterName);
@@ -975,7 +990,7 @@ public partial class MySqlAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -985,7 +1000,7 @@ public partial class MySqlAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -994,6 +1009,11 @@ public partial class MySqlAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat("@{0}", parameterName);
@@ -1058,7 +1078,7 @@ public partial class PostgresAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -1068,7 +1088,7 @@ public partial class PostgresAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -1077,6 +1097,11 @@ public partial class PostgresAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat("@{0}", parameterName);
@@ -1118,7 +1143,7 @@ public partial class SQLiteAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -1128,7 +1153,7 @@ public partial class SQLiteAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -1137,6 +1162,11 @@ public partial class SQLiteAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat("@{0}", parameterName);
@@ -1144,7 +1174,7 @@ public partial class SQLiteAdapter : ISqlAdapter
 }
 
 /// <summary>
-/// The Firebase SQL adapeter.
+/// The Firebase SQL adapter.
 /// </summary>
 public partial class FbAdapter : ISqlAdapter
 {
@@ -1182,7 +1212,7 @@ public partial class FbAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -1192,7 +1222,7 @@ public partial class FbAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -1201,6 +1231,11 @@ public partial class FbAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat("@{0}", parameterName);
@@ -1227,9 +1262,9 @@ public partial class OracleAdapter : ISqlAdapter
     public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var parameters = new DynamicParameters(entityToInsert);
-        string command = CreateInsertSql(tableName, columnList, parameterList, keyProperties, parameters);
+        var cmd = CreateInsertSql(tableName, columnList, parameterList, keyProperties, parameters);
 
-        connection.Execute(command, parameters, transaction, commandTimeout: commandTimeout);
+        connection.Execute(cmd, parameters, transaction, commandTimeout: commandTimeout);
 
         // Return the key by assigning the corresponding property in the object - by product is that it supports compound primary keys
         var id = 0;
@@ -1274,7 +1309,7 @@ public partial class OracleAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnName(StringBuilder sb, string columnName)
     {
@@ -1286,7 +1321,7 @@ public partial class OracleAdapter : ISqlAdapter
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
     {
@@ -1295,6 +1330,11 @@ public partial class OracleAdapter : ISqlAdapter
         AppendParameter(sb, columnName);
     }
 
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
     public void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.AppendFormat(":{0}", parameterName);
