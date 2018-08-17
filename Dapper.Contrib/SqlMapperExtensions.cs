@@ -1273,7 +1273,7 @@ public partial class OracleAdapter : ISqlAdapter
         foreach (var property in propertyInfos)
         {
             var value = parameters.Get<int>($"newid_{property.Name}");
-            property.SetValue(entityToInsert, value, null);
+            property.SetValue(entityToInsert, Convert.ChangeType(value, property.PropertyType), null);
             if (id == 0) { id = value; }
         }
         return id;
