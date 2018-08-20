@@ -246,7 +246,7 @@ namespace Dapper.Tests.Contrib
         public async Task BuilderTemplateWithoutCompositionAsync()
         {
             var builder = new SqlBuilder();
-            var template = builder.AddTemplate("SELECT COUNT(*) FROM Users WHERE Age = @age", new { age = 5 });
+            var template = builder.AddTemplate(BuilderTemplateWithoutComposition_Sql, new { age = 5 });
 
             if (template.RawSql == null) throw new Exception("RawSql null");
             if (template.Parameters == null) throw new Exception("Parameters null");
@@ -403,10 +403,12 @@ namespace Dapper.Tests.Contrib
 
                 var total = await connection.InsertAsync(users).ConfigureAwait(false);
                 Assert.Equal(total, numberOfEntities);
-                users = (List<User>)await connection.GetAllAsync<User>().ConfigureAwait(false);
+                users = (await connection.GetAllAsync<User>().ConfigureAwait(false)).ToList();
                 Assert.Equal(users.Count, numberOfEntities);
-                var iusers = await connection.GetAllAsync<IUser>().ConfigureAwait(false);
-                Assert.Equal(iusers.ToList().Count, numberOfEntities);
+                var iusers = (await connection.GetAllAsync<IUser>().ConfigureAwait(false)).OrderBy(u => u.Age).ToList();
+                Assert.Equal(iusers.Count, numberOfEntities);
+                for (var i = 0; i < numberOfEntities; i++)
+                    Assert.Equal(iusers[i].Age, i);
             }
         }
 

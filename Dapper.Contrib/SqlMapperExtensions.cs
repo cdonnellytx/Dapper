@@ -73,7 +73,8 @@ namespace Dapper.Contrib.Extensions
                 ["npgsqlconnection"] = new PostgresAdapter(),
                 ["sqliteconnection"] = new SQLiteAdapter(),
                 ["mysqlconnection"] = new MySqlAdapter(),
-                ["fbconnection"] = new FbAdapter()
+                ["fbconnection"] = new FbAdapter(),
+                ["oracleconnection"] = new OracleAdapter(),
             };
 
         private static List<PropertyInfo> ComputedPropertiesCache(Type type)
@@ -180,13 +181,26 @@ namespace Dapper.Contrib.Extensions
             {
                 var key = GetSingleKey<T>(nameof(Get));
                 var name = GetTableName(type);
+                var allProperties = TypePropertiesCache(type);
+                var computedProperties = ComputedPropertiesCache(type);
+                var allPropertiesExceptComputed = allProperties.Except(computedProperties).ToList();
 
-                sql = $"select * from {name} where {key.Name} = @id";
-                GetQueries[type.TypeHandle] = sql;
+                var adapter = GetFormatter(connection);
+
+                var sb = adapter.CreateSelectStatement(name, allPropertiesExceptComputed);
+
+                sb.Append(" where ");
+                adapter.AppendColumnName(sb, key.Name);
+                sb.Append(" = ");
+                adapter.AppendParameter(sb, "id");
+
+                GetQueries[type.TypeHandle] = sql = sb.ToString();
             }
 
             var dynParms = new DynamicParameters();
-            dynParms.Add("@id", id);
+            // DynamicParameters does not require the parameter prefix.
+            // https://github.com/StackExchange/dapper-dot-net/blob/master/Dapper.Tests/Tests.cs#L615
+            dynParms.Add("id", id);
 
             T obj;
 
@@ -224,7 +238,7 @@ namespace Dapper.Contrib.Extensions
         }
 
         /// <summary>
-        /// Returns a list of entites from table "Ts".  
+        /// Returns a list of entities from table "Ts".
         /// Id of T must be marked with [Key] attribute.
         /// Entities created from interfaces are tracked/intercepted for changes and used by the Update() extension
         /// for optimal performance. 
@@ -243,9 +257,15 @@ namespace Dapper.Contrib.Extensions
             {
                 GetSingleKey<T>(nameof(GetAll));
                 var name = GetTableName(type);
+                var allProperties = TypePropertiesCache(type);
+                var computedProperties = ComputedPropertiesCache(type);
+                var allPropertiesExceptComputed = allProperties.Except(computedProperties).ToList();
 
-                sql = "select * from " + name;
-                GetQueries[cacheType.TypeHandle] = sql;
+                var adapter = GetFormatter(connection);
+
+                var sb = adapter.CreateSelectStatement(name, allPropertiesExceptComputed);
+
+                GetQueries[cacheType.TypeHandle] = sql = sb.ToString();
             }
 
             if (!type.IsInterface()) return connection.Query<T>(sql, null, transaction, commandTimeout: commandTimeout);
@@ -367,7 +387,7 @@ namespace Dapper.Contrib.Extensions
             for (var i = 0; i < allPropertiesExceptKeyAndComputed.Count; i++)
             {
                 var property = allPropertiesExceptKeyAndComputed[i];
-                sbParameterList.AppendFormat("@{0}", property.Name);
+                adapter.AppendParameter(sbParameterList, property.Name);
                 if (i < allPropertiesExceptKeyAndComputed.Count - 1)
                     sbParameterList.Append(", ");
             }
@@ -776,6 +796,16 @@ namespace Dapper.Contrib.Extensions
 public partial interface ISqlAdapter
 {
     /// <summary>
+    /// Starts a new SQL <c>SELECT</c> statement.
+    /// </summary>
+    /// <param name="tableName">The name of the table.</param>
+    /// <param name="properties">The properties to select.</param>
+    /// <returns>
+    /// A <see cref="StringBuilder"/> representing a SQL <c>SELECT</c> statement from the initial <paramref name="tableName"/>.
+    /// </returns>
+    StringBuilder CreateSelectStatement(string tableName, IEnumerable<PropertyInfo> properties);
+
+    /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
     /// </summary>
     /// <param name="connection">The connection to use.</param>
@@ -790,23 +820,138 @@ public partial interface ISqlAdapter
     int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert);
 
     /// <summary>
+    /// Adds the name of an alias.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="aliasName">The alias name.</param>
+    void AppendAlias(StringBuilder sb, string aliasName);
+
+    /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     void AppendColumnName(StringBuilder sb, string columnName);
+
     /// <summary>
     /// Adds a column equality to a parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
     void AppendColumnNameEqualsValue(StringBuilder sb, string columnName);
+
+    /// <summary>
+    /// Adds a column name plus alias for use in a <c>SELECT</c> statement.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="columnName">The column and (optional) alias name.</param>
+    void AppendColumnNameWithAlias(StringBuilder sb, string columnName);
+
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    void AppendParameter(StringBuilder sb, string parameterName);
+}
+
+/// <summary>
+/// Base class for most <see cref="ISqlAdapter"/> implementations.
+/// </summary>
+public abstract partial class SqlAdapterBase : ISqlAdapter
+{
+    /// <summary>
+    /// Starts a new SQL <c>SELECT</c> statement.
+    /// </summary>
+    /// <param name="tableName">The name of the table.</param>
+    /// <param name="properties">The properties to select.</param>
+    /// <returns>
+    /// A <see cref="StringBuilder"/> representing a SQL <c>SELECT</c> statement from the initial <paramref name="tableName"/>.
+    /// </returns>
+    public virtual StringBuilder CreateSelectStatement(string tableName, IEnumerable<PropertyInfo> properties)
+    {
+        var propertiesList = properties as IList<PropertyInfo> ?? properties.ToList();
+
+        StringBuilder sb = new StringBuilder();
+        sb.Append("SELECT ");
+        for (var i = 0; i < propertiesList.Count; i++)
+        {
+            var property = propertiesList[i];
+            AppendColumnNameWithAlias(sb, property.Name);
+            if (i < propertiesList.Count - 1)
+                sb.Append(", ");
+        }
+
+        sb.Append(" FROM ");
+        sb.Append(tableName); // TODO make an AppendTableName
+
+        return sb;
+    }
+
+    /// <summary>
+    /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
+    /// </summary>
+    /// <param name="connection">The connection to use.</param>
+    /// <param name="transaction">The transaction to use.</param>
+    /// <param name="commandTimeout">The command timeout to use.</param>
+    /// <param name="tableName">The table to insert into.</param>
+    /// <param name="columnList">The columns to set with this insert.</param>
+    /// <param name="parameterList">The parameters to set for this insert.</param>
+    /// <param name="keyProperties">The key columns in this table.</param>
+    /// <param name="entityToInsert">The entity to insert.</param>
+    /// <returns>The Id of the row created.</returns>
+    public abstract int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert);
+
+    /// <summary>
+    /// Adds the name of an alias.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="aliasName">The alias name.</param>
+    public virtual void AppendAlias(StringBuilder sb, string aliasName) => AppendColumnName(sb, aliasName);
+
+    /// <summary>
+    /// Adds the name of a column.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="columnName">The column name.</param>
+    public abstract void AppendColumnName(StringBuilder sb, string columnName);
+
+    /// <summary>
+    /// Adds a column equality to a parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="columnName">The column name.</param>
+    public virtual void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
+    {
+        AppendColumnName(sb, columnName);
+        sb.Append(" = ");
+        AppendParameter(sb, columnName);
+    }
+
+    /// <summary>
+    /// Adds a column name plus alias for use in a <c>SELECT</c> statement.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="columnName">The column name.</param>
+    public virtual void AppendColumnNameWithAlias(StringBuilder sb, string columnName)
+    {
+        AppendColumnName(sb, columnName);
+        sb.Append(" AS ");
+        AppendAlias(sb, columnName);
+    }
+
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The column and (optional) alias name.</param>
+    public abstract void AppendParameter(StringBuilder sb, string parameterName);
 }
 
 /// <summary>
 /// The SQL Server database adapter.
 /// </summary>
-public partial class SqlServerAdapter : ISqlAdapter
+public partial class SqlServerAdapter : SqlAdapterBase
 {
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -820,7 +965,7 @@ public partial class SqlServerAdapter : ISqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"insert into {tableName} ({columnList}) values ({parameterList});select SCOPE_IDENTITY() id";
         var multi = connection.QueryMultiple(cmd, entityToInsert, transaction, commandTimeout);
@@ -841,28 +986,22 @@ public partial class SqlServerAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
-    public void AppendColumnName(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("[{0}]", columnName);
-    }
+    public override void AppendColumnName(StringBuilder sb, string columnName) => sb.Append('[').Append(columnName).Append(']');
 
     /// <summary>
-    /// Adds a column equality to a parameter.
+    /// Adds the parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
-    /// <param name="columnName">The column name.</param>
-    public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("[{0}] = @{1}", columnName, columnName);
-    }
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName) => sb.Append('@').Append(parameterName);
 }
 
 /// <summary>
 /// The SQL Server Compact Edition database adapter.
 /// </summary>
-public partial class SqlCeServerAdapter : ISqlAdapter
+public partial class SqlCeServerAdapter : SqlAdapterBase
 {
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -876,7 +1015,7 @@ public partial class SqlCeServerAdapter : ISqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"insert into {tableName} ({columnList}) values ({parameterList})";
         connection.Execute(cmd, entityToInsert, transaction, commandTimeout);
@@ -897,28 +1036,22 @@ public partial class SqlCeServerAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
-    public void AppendColumnName(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("[{0}]", columnName);
-    }
+    public override void AppendColumnName(StringBuilder sb, string columnName) => sb.Append('[').Append(columnName).Append(']');
 
     /// <summary>
-    /// Adds a column equality to a parameter.
+    /// Adds the parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
-    /// <param name="columnName">The column name.</param>
-    public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("[{0}] = @{1}", columnName, columnName);
-    }
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName) => sb.Append('@').Append(parameterName);
 }
 
 /// <summary>
 /// The MySQL database adapter.
 /// </summary>
-public partial class MySqlAdapter : ISqlAdapter
+public partial class MySqlAdapter : SqlAdapterBase
 {
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -932,7 +1065,7 @@ public partial class MySqlAdapter : ISqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"insert into {tableName} ({columnList}) values ({parameterList})";
         connection.Execute(cmd, entityToInsert, transaction, commandTimeout);
@@ -952,28 +1085,22 @@ public partial class MySqlAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
-    public void AppendColumnName(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("`{0}`", columnName);
-    }
+    public override void AppendColumnName(StringBuilder sb, string columnName) => sb.Append('`').Append(columnName).Append('`');
 
     /// <summary>
-    /// Adds a column equality to a parameter.
+    /// Adds the parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
-    /// <param name="columnName">The column name.</param>
-    public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("`{0}` = @{1}", columnName, columnName);
-    }
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName) => sb.Append('@').Append(parameterName);
 }
 
 /// <summary>
 /// The Postgres database adapter.
 /// </summary>
-public partial class PostgresAdapter : ISqlAdapter
+public partial class PostgresAdapter : SqlAdapterBase
 {
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -987,7 +1114,7 @@ public partial class PostgresAdapter : ISqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var sb = new StringBuilder();
         sb.AppendFormat("insert into {0} ({1}) values ({2})", tableName, columnList, parameterList);
@@ -1013,7 +1140,7 @@ public partial class PostgresAdapter : ISqlAdapter
 
         var results = connection.Query(sb.ToString(), entityToInsert, transaction, commandTimeout: commandTimeout).ToList();
 
-        // Return the key by assinging the corresponding property in the object - by product is that it supports compound primary keys
+        // Return the key by assigning the corresponding property in the object - by product is that it supports compound primary keys
         var id = 0;
         foreach (var p in propertyInfos)
         {
@@ -1028,28 +1155,22 @@ public partial class PostgresAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
-    public void AppendColumnName(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("\"{0}\"", columnName);
-    }
+    public override void AppendColumnName(StringBuilder sb, string columnName) => sb.Append('"').Append(columnName).Append('"');
 
     /// <summary>
-    /// Adds a column equality to a parameter.
+    /// Adds the parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
-    /// <param name="columnName">The column name.</param>
-    public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("\"{0}\" = @{1}", columnName, columnName);
-    }
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName) => sb.Append('@').Append(parameterName);
 }
 
 /// <summary>
 /// The SQLite database adapter.
 /// </summary>
-public partial class SQLiteAdapter : ISqlAdapter
+public partial class SQLiteAdapter : SqlAdapterBase
 {
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -1063,7 +1184,7 @@ public partial class SQLiteAdapter : ISqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"INSERT INTO {tableName} ({columnList}) VALUES ({parameterList}); SELECT last_insert_rowid() id";
         var multi = connection.QueryMultiple(cmd, entityToInsert, transaction, commandTimeout);
@@ -1081,28 +1202,22 @@ public partial class SQLiteAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
-    public void AppendColumnName(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("\"{0}\"", columnName);
-    }
+    public override void AppendColumnName(StringBuilder sb, string columnName) => sb.Append('"').Append(columnName).Append('"');
 
     /// <summary>
-    /// Adds a column equality to a parameter.
+    /// Adds the parameter.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
-    /// <param name="columnName">The column name.</param>
-    public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
-    {
-        sb.AppendFormat("\"{0}\" = @{1}", columnName, columnName);
-    }
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName) => sb.Append('@').Append(parameterName);
 }
 
 /// <summary>
-/// The Firebase SQL adapeter.
+/// The Firebase SQL adapter.
 /// </summary>
-public partial class FbAdapter : ISqlAdapter
+public partial class FbAdapter : SqlAdapterBase
 {
     /// <summary>
     /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
@@ -1116,7 +1231,7 @@ public partial class FbAdapter : ISqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"insert into {tableName} ({columnList}) values ({parameterList})";
         connection.Execute(cmd, entityToInsert, transaction, commandTimeout);
@@ -1138,20 +1253,134 @@ public partial class FbAdapter : ISqlAdapter
     /// <summary>
     /// Adds the name of a column.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
+    /// <param name="sb">The string builder to append to.</param>
     /// <param name="columnName">The column name.</param>
-    public void AppendColumnName(StringBuilder sb, string columnName)
+    public override void AppendColumnName(StringBuilder sb, string columnName) => sb.Append(columnName);
+
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName) => sb.Append('@').Append(parameterName);
+}
+
+/// <summary>
+/// The Oracle database adapter.
+/// </summary>
+public partial class OracleAdapter : SqlAdapterBase
+{
+    private string GetInsertReturnParameterName(string name) => $"newid_{name}"; // FIXME won't work if name more than 24 characters prior to 12.2
+
+    /// <summary>
+    /// Inserts <paramref name="entityToInsert"/> into the database, returning the Id of the row created.
+    /// </summary>
+    /// <param name="connection">The connection to use.</param>
+    /// <param name="transaction">The transaction to use.</param>
+    /// <param name="commandTimeout">The command timeout to use.</param>
+    /// <param name="tableName">The table to insert into.</param>
+    /// <param name="columnList">The columns to set with this insert.</param>
+    /// <param name="parameterList">The parameters to set for this insert.</param>
+    /// <param name="keyProperties">The key columns in this table.</param>
+    /// <param name="entityToInsert">The entity to insert.</param>
+    /// <returns>The Id of the row created.</returns>
+    public override int Insert(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
-        sb.AppendFormat("{0}", columnName);
+        var parameters = new DynamicParameters(entityToInsert);
+
+        var propertyInfos = keyProperties as PropertyInfo[] ?? keyProperties.ToArray();
+        var cmd = CreateInsertSql(tableName, columnList, parameterList, propertyInfos, parameters);
+
+        connection.Execute(cmd, parameters, transaction, commandTimeout: commandTimeout);
+
+        // Return the key by assigning the corresponding property in the object - by product is that it supports compound primary keys
+        var id = 0;
+        foreach (var property in propertyInfos)
+        {
+            var value = parameters.Get<int>(GetInsertReturnParameterName(property.Name));
+            property.SetValue(entityToInsert, Convert.ChangeType(value, property.PropertyType), null);
+            if (id == 0) { id = value; }
+        }
+        return id;
     }
 
     /// <summary>
-    /// Adds a column equality to a parameter.
+    /// Generates an Oracle SQL <c>INSERT</c> statement.
     /// </summary>
-    /// <param name="sb">The string builder  to append to.</param>
-    /// <param name="columnName">The column name.</param>
-    public void AppendColumnNameEqualsValue(StringBuilder sb, string columnName)
+    /// <param name="tableName">The table to insert into.</param>
+    /// <param name="columnList">The columns to set with this insert.</param>
+    /// <param name="parameterList">The parameters to set for this insert.</param>
+    /// <param name="keyProperties">The key columns in this table.</param>
+    /// <param name="parameters">The dynamic parameter bag.</param>
+    /// <returns>An Oracle SQL <c>INSERT</c> statement.</returns>
+    protected string CreateInsertSql(string tableName, string columnList, string parameterList, PropertyInfo[] keyProperties, DynamicParameters parameters)
     {
-        sb.AppendFormat("{0} = @{1}", columnName, columnName);
+        StringBuilder sb = new StringBuilder();
+        sb.AppendFormat("INSERT INTO {0} ({1}) VALUES ({2})", tableName, columnList, parameterList);
+
+        // TODO does Dapper need to return everything if [Key] is empty?  I don't think so?
+        if (keyProperties.Length > 0)
+        {
+            sb.Append(" RETURNING ");
+            var first = true;
+            foreach (var property in keyProperties)
+            {
+                if (!first)
+                    sb.Append(", ");
+                first = false;
+                sb.Append(property.Name);
+                sb.Append(" INTO ");
+
+                string parameterName = GetInsertReturnParameterName(property.Name);
+
+                AppendParameter(sb, parameterName);
+                parameters.Add(parameterName, dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Adds the name of an alias.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="aliasName">The alias name.</param>
+    public override void AppendAlias(StringBuilder sb, string aliasName)
+    {
+        if (string.IsNullOrEmpty(aliasName)) throw new ArgumentException("Value cannot be null or empty.", nameof(aliasName));
+
+        // In Oracle when column names are quoted they are case sensitive, but *not* case-preserving.
+        // The Oracle driver compensates for this by treating names case-insensitively when unquoted, and case-sensitively when quoted.
+        // Dapper needs the alias to match the field name, so we quote the literal string.
+        sb.Append('"').Append(aliasName).Append('"');
+    }
+
+    /// <summary>
+    /// Adds the name of a column.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="columnName">The column name.</param>
+    public override void AppendColumnName(StringBuilder sb, string columnName)
+    {
+        if (string.IsNullOrEmpty(columnName)) throw new ArgumentException("Value cannot be null or empty.", nameof(columnName));
+
+        // In Oracle when column names are quoted they are case sensitive, but *not* case-preserving.
+        // The Oracle driver compensates for this by treating names case-insensitively when unquoted, and case-sensitively when quoted.
+        // To ensure we safely escape keywords, quote it and upper-case it.
+        // TODO need to verify this doesn't break in the Turkish test
+        sb.Append('"').Append(columnName.ToUpperInvariant()).Append('"');
+    }
+
+    /// <summary>
+    /// Adds the parameter.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="parameterName">The parameter name.</param>
+    public override void AppendParameter(StringBuilder sb, string parameterName)
+    {
+        sb.Append(':');
+        // FIXME Bind variables cannot be quoted, so reserved words don't work.
+        // Since DynamicParameters controls the naming, we have to find a solution.
+        sb.Append(parameterName);
     }
 }
