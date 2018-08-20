@@ -1412,7 +1412,6 @@ public partial class OracleAdapter : SqlAdapterBase
         else
         {
             // It's not quoted.  To ensure we safely escape keywords, quote it and upper-case it.
-            // TODO need to verify this doesn't break in the Turkish test
             sb.Append(parameterName);
         }
     }
