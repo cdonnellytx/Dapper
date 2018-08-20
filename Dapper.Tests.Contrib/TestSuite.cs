@@ -606,7 +606,7 @@ namespace Dapper.Tests.Contrib
                 Assert.Equal(total, numberOfEntities);
                 users = connection.GetAll<User>().ToList();
                 Assert.Equal(users.Count, numberOfEntities);
-                var iusers = connection.GetAll<IUser>().ToList();
+                var iusers = connection.GetAll<IUser>().OrderBy(u => u.Age).ToList();
                 Assert.Equal(iusers.Count, numberOfEntities);
                 for (var i = 0; i < numberOfEntities; i++)
                     Assert.Equal(iusers[i].Age, i);

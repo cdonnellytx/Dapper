@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -27,16 +26,21 @@ namespace Dapper.Contrib.Extensions
         {
             var type = typeof(T);
 
-            var adapter = GetFormatter(connection);
-
             if (!GetQueries.TryGetValue(type.TypeHandle, out string sql))
             {
                 var key = GetSingleKey<T>(nameof(GetAsync));
                 var name = GetTableName(type);
+                var allProperties = TypePropertiesCache(type);
+                var computedProperties = ComputedPropertiesCache(type);
+                var allPropertiesExceptComputed = allProperties.Except(computedProperties).ToList();
 
-                var sb = adapter.CreateSelectStatement(name, TypePropertiesCache(type));
+                var adapter = GetFormatter(connection);
 
-                sb.AppendFormat(" where {0} = ", key.Name);
+                var sb = adapter.CreateSelectStatement(name, allPropertiesExceptComputed);
+
+                sb.Append(" where ");
+                adapter.AppendColumnName(sb, key.Name);
+                sb.Append(" = ");
                 adapter.AppendParameter(sb, "id");
 
                 GetQueries[type.TypeHandle] = sql = sb.ToString();
@@ -57,15 +61,9 @@ namespace Dapper.Contrib.Extensions
 
             var obj = ProxyGenerator.GetInterfaceProxy<T>();
 
-            // ASSUMPTION: The properties are in the same order in the SQL as in the underlying DapperRow.
-            var allProperties = TypePropertiesCache(type);
-            var values = res.Values as object[] ?? res.Values.ToArray();
-            Debug.Assert(allProperties.Count == values.Length, "allProperties.Count == values.Length");
-
-            for (var i = 0; i < allProperties.Count; i++)
+            foreach (var property in TypePropertiesCache(type))
             {
-                var property = allProperties[i];
-                var val = values[i];
+                var val = res[property.Name];
                 if (val == null) continue;
                 if (property.PropertyType.IsGenericType() && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                 {
@@ -103,9 +101,14 @@ namespace Dapper.Contrib.Extensions
             {
                 GetSingleKey<T>(nameof(GetAll));
                 var name = GetTableName(type);
+                var allProperties = TypePropertiesCache(type);
+                var computedProperties = ComputedPropertiesCache(type);
+                var allPropertiesExceptComputed = allProperties.Except(computedProperties).ToList();
+
                 var adapter = GetFormatter(connection);
 
-                var sb = adapter.CreateSelectStatement(name, TypePropertiesCache(type));
+                var sb = adapter.CreateSelectStatement(name, allPropertiesExceptComputed);
+
                 GetQueries[cacheType.TypeHandle] = sql = sb.ToString();
             }
 
@@ -122,16 +125,10 @@ namespace Dapper.Contrib.Extensions
             var list = new List<T>();
             foreach (IDictionary<string, object> res in result)
             {
-                // ASSUMPTION: The properties are in the same order in the SQL as in the underlying DapperRow.
                 var obj = ProxyGenerator.GetInterfaceProxy<T>();
-                var allProperties = TypePropertiesCache(type);
-                var values = res.Values as object[] ?? res.Values.ToArray();
-                Debug.Assert(allProperties.Count == values.Length, "allProperties.Count == values.Length");
-
-                for (var i = 0; i < allProperties.Count; i++)
+                foreach (var property in TypePropertiesCache(type))
                 {
-                    var property = allProperties[i];
-                    var val = values[i];
+                    var val = res[property.Name];
                     if (val == null) continue;
                     if (property.PropertyType.IsGenericType() && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
                     {
@@ -383,6 +380,15 @@ public partial interface ISqlAdapter
     Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert);
 }
 
+/// <summary>
+/// Base class for most <see cref="ISqlAdapter"/> implementations.
+/// </summary>
+public abstract partial class SqlAdapterBase
+{
+    /// <inheritdoc />
+    public abstract Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert);
+}
+
 public partial class SqlServerAdapter
 {
     /// <summary>
@@ -397,7 +403,7 @@ public partial class SqlServerAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"INSERT INTO {tableName} ({columnList}) values ({parameterList}); SELECT SCOPE_IDENTITY() id";
         var multi = await connection.QueryMultipleAsync(cmd, entityToInsert, transaction, commandTimeout).ConfigureAwait(false);
@@ -430,7 +436,7 @@ public partial class SqlCeServerAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"INSERT INTO {tableName} ({columnList}) VALUES ({parameterList})";
         await connection.ExecuteAsync(cmd, entityToInsert, transaction, commandTimeout).ConfigureAwait(false);
@@ -463,7 +469,7 @@ public partial class MySqlAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName,
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName,
         string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"INSERT INTO {tableName} ({columnList}) VALUES ({parameterList})";
@@ -496,7 +502,7 @@ public partial class PostgresAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var sb = new StringBuilder();
         sb.AppendFormat("INSERT INTO {0} ({1}) VALUES ({2})", tableName, columnList, parameterList);
@@ -549,7 +555,7 @@ public partial class SQLiteAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"INSERT INTO {tableName} ({columnList}) VALUES ({parameterList}); SELECT last_insert_rowid() id";
         var multi = await connection.QueryMultipleAsync(cmd, entityToInsert, transaction, commandTimeout).ConfigureAwait(false);
@@ -579,7 +585,7 @@ public partial class FbAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var cmd = $"insert into {tableName} ({columnList}) values ({parameterList})";
         await connection.ExecuteAsync(cmd, entityToInsert, transaction, commandTimeout).ConfigureAwait(false);
@@ -613,7 +619,7 @@ public partial class OracleAdapter
     /// <param name="keyProperties">The key columns in this table.</param>
     /// <param name="entityToInsert">The entity to insert.</param>
     /// <returns>The Id of the row created.</returns>
-    public async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
+    public override async Task<int> InsertAsync(IDbConnection connection, IDbTransaction transaction, int? commandTimeout, string tableName, string columnList, string parameterList, IEnumerable<PropertyInfo> keyProperties, object entityToInsert)
     {
         var parameters = new DynamicParameters(entityToInsert);
         var propertyInfos = keyProperties as PropertyInfo[] ?? keyProperties.ToArray();
@@ -625,7 +631,7 @@ public partial class OracleAdapter
         var id = 0;
         foreach (var property in propertyInfos)
         {
-            int value = parameters.Get<int>($"newid_{property.Name}");
+            int value = parameters.Get<int>(GetInsertReturnParameterName(property.Name));
             property.SetValue(entityToInsert, Convert.ChangeType(value, property.PropertyType), null);
             if (id == 0) { id = value; }
         }

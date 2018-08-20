@@ -403,10 +403,12 @@ namespace Dapper.Tests.Contrib
 
                 var total = await connection.InsertAsync(users).ConfigureAwait(false);
                 Assert.Equal(total, numberOfEntities);
-                users = (List<User>)await connection.GetAllAsync<User>().ConfigureAwait(false);
+                users = (await connection.GetAllAsync<User>().ConfigureAwait(false)).ToList();
                 Assert.Equal(users.Count, numberOfEntities);
-                var iusers = await connection.GetAllAsync<IUser>().ConfigureAwait(false);
-                Assert.Equal(iusers.ToList().Count, numberOfEntities);
+                var iusers = (await connection.GetAllAsync<IUser>().ConfigureAwait(false)).OrderBy(u => u.Age).ToList();
+                Assert.Equal(iusers.Count, numberOfEntities);
+                for (var i = 0; i < numberOfEntities; i++)
+                    Assert.Equal(iusers[i].Age, i);
             }
         }
 
