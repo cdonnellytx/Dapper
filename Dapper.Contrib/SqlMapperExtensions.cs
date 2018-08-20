@@ -1341,13 +1341,6 @@ public partial class OracleAdapter : SqlAdapterBase
     }
 
     /// <summary>
-    /// Returns true if the name is quoted, false otherwise.
-    /// </summary>
-    /// <param name="name"></param>
-    /// <returns></returns>
-    private bool IsQuoted(string name) => name.Length >= 2 && name[0] == '"' && name[name.Length - 1] == '"';
-
-    /// <summary>
     /// Adds the name of an alias.
     /// </summary>
     /// <param name="sb">The string builder to append to.</param>
@@ -1359,16 +1352,7 @@ public partial class OracleAdapter : SqlAdapterBase
         // In Oracle when column names are quoted they are case sensitive, but *not* case-preserving.
         // The Oracle driver compensates for this by treating names case-insensitively when unquoted, and case-sensitively when quoted.
         // Dapper needs the alias to match the field name, so we quote the literal string.
-        if (IsQuoted(aliasName))
-        {
-            // It's quoted; append as-is.
-            sb.Append(aliasName);
-        }
-        else
-        {
-            // It's not quoted.  Quote it.
-            sb.Append('"').Append(aliasName).Append('"');
-        }
+        sb.Append('"').Append(aliasName).Append('"');
     }
 
     /// <summary>
@@ -1382,17 +1366,9 @@ public partial class OracleAdapter : SqlAdapterBase
 
         // In Oracle when column names are quoted they are case sensitive, but *not* case-preserving.
         // The Oracle driver compensates for this by treating names case-insensitively when unquoted, and case-sensitively when quoted.
-        if (IsQuoted(columnName))
-        {
-            // It's quoted; append as-is.
-            sb.Append(columnName);
-        }
-        else
-        {
-            // It's not quoted.  To ensure we safely escape keywords, quote it and upper-case it.
-            // TODO need to verify this doesn't break in the Turkish test
-            sb.Append('"').Append(columnName.ToUpperInvariant()).Append('"');
-        }
+        // To ensure we safely escape keywords, quote it and upper-case it.
+        // TODO need to verify this doesn't break in the Turkish test
+        sb.Append('"').Append(columnName.ToUpperInvariant()).Append('"');
     }
 
     /// <summary>
@@ -1403,16 +1379,8 @@ public partial class OracleAdapter : SqlAdapterBase
     public override void AppendParameter(StringBuilder sb, string parameterName)
     {
         sb.Append(':');
-
-        if (IsQuoted(parameterName))
-        {
-            // It's quoted; append as-is.
-            sb.Append(parameterName);
-        }
-        else
-        {
-            // It's not quoted.  To ensure we safely escape keywords, quote it and upper-case it.
-            sb.Append(parameterName);
-        }
+        // FIXME Bind variables cannot be quoted, so reserved words don't work.
+        // Since DynamicParameters controls the naming, we have to find a solution.
+        sb.Append(parameterName);
     }
 }
