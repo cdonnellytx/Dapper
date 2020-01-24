@@ -3,7 +3,8 @@ using Dapper.Database.Extensions;
 using System.ComponentModel;
 using System.Linq;
 
-namespace Dapper.Tests.Performance
+
+namespace Dapper.Tests.Performance.DapperDotDatabase
 {
     /// <summary>
     /// Benchmarks for the <a href="https://github.com/dallasbeek/Dapper.Database">Dapper.Database</a> extension library built on top of Dapper.
