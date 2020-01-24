@@ -1,10 +1,11 @@
 ﻿using BenchmarkDotNet.Attributes;
-using PetaPoco;
 using System.ComponentModel;
 using System.Linq;
 
 namespace Dapper.Tests.Performance
 {
+    using Database = PetaPoco.Database; // needed due to Dapper.Database
+
     [Description("PetaPoco")]
     public class PetaPocoBenchmarks : BenchmarkBase
     {
